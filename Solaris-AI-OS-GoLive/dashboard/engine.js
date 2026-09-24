@@ -55,6 +55,10 @@
     const units = bill / tariff;
     let kw = Math.max(1, Math.round((units / 120) * 2) / 2);
     if (lead.type === 'Home' || lead.type === 'Farm') kw = Math.min(kw, 10);
+    // roof space caps the system: ~100 sq ft of shadow-free roof per kW
+    const roofKw = Number(lead.roofArea) > 0 ? Math.max(1, Math.floor((Number(lead.roofArea) / 100) * 2) / 2) : 0;
+    const roofLimited = roofKw > 0 && roofKw < kw;
+    if (roofLimited) kw = roofKw;
     let subsidy = 0;
     if (lead.type === 'Home' || lead.type === 'Farm') subsidy = Math.min(kw, 2) * 30000 + (kw > 2 ? Math.min(kw - 2, 1) * 18000 : 0);
     if (lead.type === 'Society') subsidy = Math.min(kw, 500) * 18000;
@@ -62,7 +66,7 @@
     const cost = kw * perKw;
     const yearSave = Math.round(Math.min(units, kw * 120) * tariff * 12 * 0.9 / 1000) * 1000;
     const payback = yearSave ? (cost - subsidy) / yearSave : null;
-    return { kw, subsidy: Math.min(subsidy, lead.type === 'Society' ? 9e9 : 78000), cost, yearSave, payback, roofNeed: Math.round(kw * 90), units: Math.round(units) };
+    return { kw, subsidy: Math.min(subsidy, lead.type === 'Society' ? 9e9 : 78000), cost, yearSave, payback, roofNeed: Math.round(kw * 90), units: Math.round(units), roofLimited, roofKw };
   }
 
   function scoreLead(l) {
