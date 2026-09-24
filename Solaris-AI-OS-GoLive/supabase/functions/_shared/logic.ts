@@ -93,11 +93,15 @@ export function sizing(lead, s) {
   const units = (Number(lead.bill) || 0) / tariff;
   let kw = Math.max(1, Math.round((units / 120) * 2) / 2);
   if (lead.type === 'Home' || lead.type === 'Farm' || !lead.type) kw = Math.min(kw, 10);
+  // roof space caps the system: ~100 sq ft of shadow-free roof per kW
+  const roofKw = Number(lead.roofArea) > 0 ? Math.max(1, Math.floor((Number(lead.roofArea) / 100) * 2) / 2) : 0;
+  const roofLimited = roofKw > 0 && roofKw < kw;
+  if (roofLimited) kw = roofKw;
   let subsidy = 0;
   if (!lead.type || lead.type === 'Home' || lead.type === 'Farm') subsidy = Math.min(78000, Math.min(kw, 2) * 30000 + (kw > 2 ? Math.min(kw - 2, 1) * 18000 : 0));
   if (lead.type === 'Society') subsidy = Math.min(kw, 500) * 18000;
   const cost = kw * (commercial ? s.priceCommercial : s.priceHome);
-  return { kw, subsidy, cost };
+  return { kw, subsidy, cost, roofLimited, roofKw };
 }
 export function scoreLead(l) {
   if (l.dnc) return 0;
@@ -140,12 +144,23 @@ const ENUM = {
   roof: { own: 'Yes', rented: 'No (rented)', 'society roof': 'Society roof' },
   timeline: { immediately: 'Immediately', 'this month': 'This month', '1-3 months': '1–3 months', '3-6 months': '3–6 months', '6+ months': '6+ months' }
 };
+// "600", "600 sq ft", "20x30", "20 by 30 feet", "1,200" → square feet (null if unusable)
+export function roofSqft(v) {
+  const t = pick(v).toLowerCase().replace(/[०-९]/g, (c) => String('०१२३४५६७८९'.indexOf(c))).replace(/,/g, '');
+  if (!t) return null;
+  const dims = t.match(/(\d+(?:\.\d+)?)\s*(?:x|\*|×|by|बाय)\s*(\d+(?:\.\d+)?)/);
+  let n = dims ? Number(dims[1]) * Number(dims[2]) : Number((t.match(/\d+(?:\.\d+)?/) || [])[0]);
+  if (/sq\s*m|square met|चौरस मीटर|मीटर/.test(t) && !/feet|foot|ft|फूट|फुट/.test(t)) n = n * 10.764;
+  if (/guntha|गुंठ/.test(t)) n = n * 1089;
+  return n >= 50 && n <= 500000 ? Math.round(n) : null;
+}
 export function mapVars(vars) {
   const v = vars || {}; const out = {};
   const prop = ENUM.property[pick(v.property || v.property_type).toLowerCase()]; if (prop) out.type = prop;
   const bill = Number(pick(v.bill_amount || v.monthly_bill).replace(/[^\d.]/g, '')); if (bill >= 100 && bill < 5e6) out.bill = Math.round(bill);
   const loc = normArea(v.locality || v.area); if (loc) out.area = loc;
   const roof = ENUM.roof[pick(v.roof_owner).toLowerCase()]; if (roof) out.roofOwn = roof;
+  const ra = roofSqft(v.roof_area_sqft || v.roof_area || v.house_area); if (ra) out.roofArea = ra;
   const tl = ENUM.timeline[pick(v.timeline).toLowerCase().replace(/\s+/g, ' ').replace('–', '-')]; if (tl) out.timeline = tl;
   const obj = pick(v.objections); if (obj) out.objections = obj.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => ({ price: 'Price', monsoon: 'Monsoon / cloudy days', 'other quotes': 'Getting other quotes', rented: 'Rented property' }[x.toLowerCase()] || x));
   const nm = pick(v.customer_name); if (nm) out.name = nm;
@@ -227,12 +242,15 @@ export function processWebhook(ctx) {
   }
 
   // ---- connected: update lead fields (never erase existing values with blanks) ----
-  ['type', 'bill', 'area', 'roofOwn', 'timeline'].forEach((k) => { if (m[k] != null && m[k] !== '') lead[k] = m[k]; });
+  ['type', 'bill', 'area', 'roofOwn', 'roofArea', 'timeline'].forEach((k) => { if (m[k] != null && m[k] !== '') lead[k] = m[k]; });
   if (m.name && (isNew || /^Caller |^Unknown/.test(lead.name))) lead.name = m.name;
   if (m.objections) lead.objections = Array.from(new Set([...(lead.objections || []), ...m.objections]));
   lead.answered = true; lead.lastContact = now; lead.attempts = 0;
   if (!lead.owner) lead.owner = routeOwner(lead, ctx.team);
-  if (lead.bill) { const z = sizing(lead, s); lead.sizeKw = z.kw; lead.estValue = z.cost; }
+  if (lead.bill) {
+    const z = sizing(lead, s); lead.sizeKw = z.kw; lead.estValue = z.cost;
+    if (z.roofLimited) res.activity.push({ id: aid(0, 'roof'), at: now, leadId: lead.id, kind: 'sys', text: `Roof ~${lead.roofArea} sq ft fits about ${z.kw} kW (bill needs more) — surveyor to check other roof / carport space` });
+  }
 
   const transcript = mapTranscript(p.interaction_transcript, startMs);
   let outcome = lead.bill ? 'Qualified' : 'Contacted';
@@ -284,7 +302,7 @@ export function processWebhook(ctx) {
 
   const summary = m.summary || [
     lead.type ? lead.type : null, lead.area ? 'in ' + lead.area : null, lead.bill ? 'bill ₹' + lead.bill.toLocaleString('en-IN') : null,
-    lead.roofOwn ? 'roof: ' + lead.roofOwn : null, (m.objections || []).length ? 'objections: ' + m.objections.join(', ') : null,
+    lead.roofOwn ? 'roof: ' + lead.roofOwn + (lead.roofArea ? ' ~' + lead.roofArea + ' sq ft' : '') : lead.roofArea ? 'roof ~' + lead.roofArea + ' sq ft' : null, (m.objections || []).length ? 'objections: ' + m.objections.join(', ') : null,
     outcome + (m.surveyTime && m.surveyBooked ? ' (' + m.surveyTime + ')' : m.callbackTime ? ' (' + m.callbackTime + ')' : '')
   ].filter(Boolean).join(' · ');
 
