@@ -12,13 +12,14 @@ Deno.serve(async (req) => {
   const flat = Object.assign({}, b, b.user_config || {}, b.metadata || {}, b.variables || {});
   const raw = u.searchParams.get('phone') || flat.user_phone_number || flat.phone || flat.caller_number || flat.from || flat.customer_phone;
   const lead = await leadByPhone(normPhone(raw));
-  if (!lead) return json({ customer_name: '', area: '', monthly_bill: '', property_type: '', lead_source: '', known_customer: 'No' });
+  if (!lead) return json({ customer_name: '', area: '', monthly_bill: '', property_type: '', lead_source: '', roof_area: '', known_customer: 'No' });
   return json({
     customer_name: (lead.cf && lead.cf.nameMr) || lead.name || '',
     area: lead.area || '',
     monthly_bill: lead.bill ? String(lead.bill) : '',
     property_type: lead.type || '',
     lead_source: lead.source || '',
+    roof_area: lead.roofArea ? String(lead.roofArea) : '',
     known_customer: lead.stage === 'Won' ? 'Yes' : 'No',
     last_outcome: lead.stage || ''
   });
