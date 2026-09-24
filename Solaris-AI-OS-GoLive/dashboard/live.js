@@ -7,6 +7,7 @@
   const TABLES = ['leads', 'calls', 'visits', 'followups', 'tickets', 'activity'];
   const CONFIG = ['settings', 'team', 'agents', 'dnc', 'campaigns'];
   const LOCAL_ONLY = ['viewAs', 'voiceOn', 'simSpeed'];
+  const CFG = (window.SOLARIS_CONFIG && window.SOLARIS_CONFIG.supabaseUrl && window.SOLARIS_CONFIG.supabaseKey) ? window.SOLARIS_CONFIG : null;
   const L = { conn: null, status: 'off', err: '', lastPull: {}, hashes: {}, lastOk: 0, busy: false, timer: null, pushT: null, seenHot: new Set(), started: 0, audio: null, needsUpload: false };
   const h = (s) => U.esc(s);
   const toast = (m) => A.toast(m);
@@ -170,7 +171,7 @@
   }
   function disconnect() {
     clearInterval(L.timer); L.conn = null; saveConn(); L.status = 'off'; L.hashes = {}; L.lastPull = {};
-    paintPill(); toast('Disconnected. The dashboard is back in demo mode.'); A.render();
+    paintPill(); toast('Logged out.'); A.render(); if (CFG) { try { sessionStorage.removeItem('solaris-demo-ok'); } catch (e) {} showGate(); }
   }
   function loop() {
     clearInterval(L.timer);
@@ -288,9 +289,9 @@
           <label class="f">Don't re-call within (hours)<input class="i" type="number" id="lv_guard" data-chg="stF" data-k="recallGuardHours" data-num="1" value="${h(s.recallGuardHours || 2)}"></label></div>
         <p class="xs muted" style="margin:0">The server enforces these, plus the calling window (${h(s.callingStart)}–${h(s.callingEnd)} for automatic calls, 09:00–21:00 for "AI call now"), the DNC list and consent.</p>
         <div class="row"><button class="btn sm" data-act="liveNotify">Allow HOT-lead pop-ups</button><button class="btn sm" data-act="livePull">Sync now</button><button class="btn sm ghost danger" data-act="liveOff">Disconnect</button></div>`
-      : `<div class="small">Connect to Solaris' live database to see real calls from the Sarvam agent. Setup takes about an hour once; see README → Step 3. ${/claude/.test(location.hostname) ? '<b>This copy runs inside Claude and cannot connect. Use the hosted dashboard link.</b>' : ''}</div>
-        <div class="fgrid"><label class="f">Supabase Project URL<input class="i" id="lv_url" value="${h(c.url || '')}" placeholder="https://xxxx.supabase.co"></label>
-          <label class="f">Anon public key<input class="i mono" id="lv_anon" value="${h(c.anon || '')}" placeholder="eyJhbGciOi…"></label>
+      : `<div class="small">Connect to Solaris' live database to see real calls from the Sarvam agent. ${CFG ? 'Log in with your Solaris staff email.' : 'Setup takes about an hour once; see README → Step 3.'} ${/claude/.test(location.hostname) ? '<b>This copy runs inside Claude and cannot connect. Use the hosted dashboard link.</b>' : ''}</div>
+        <div class="fgrid">${CFG ? '' : `<label class="f">Supabase Project URL<input class="i" id="lv_url" value="${h(c.url || '')}" placeholder="https://xxxx.supabase.co"></label>
+          <label class="f">Anon public key<input class="i mono" id="lv_anon" value="${h(c.anon || '')}" placeholder="eyJhbGciOi…"></label>`}
           <label class="f">Staff email<input class="i" id="lv_email" value="${h(c.email || '')}" placeholder="owner@solaris.in" autocomplete="username"></label>
           <label class="f">Password<input class="i" type="password" id="lv_pw" autocomplete="current-password" data-enter="liveConnect"></label></div>
         <div class="row"><button class="btn pri" data-act="liveConnect">Connect &amp; log in</button>${L.err ? `<span class="small" style="color:var(--bad)">${h(L.err)}</span>` : ''}</div>`}
@@ -299,9 +300,10 @@
   Object.assign(A.acts, {
     liveConnect: async (el) => {
       const v = (id) => (document.getElementById(id) || {}).value || '';
-      if (!/^https?:\/\//.test(v('lv_url')) || !v('lv_anon') || !v('lv_email') || !v('lv_pw')) return toast('Fill the Project URL, anon key, email and password');
+      const url = CFG ? CFG.supabaseUrl : v('lv_url'), key = CFG ? CFG.supabaseKey : v('lv_anon');
+      if (!/^https?:\/\//.test(url) || !key || !v('lv_email') || !v('lv_pw')) return toast(CFG ? 'Enter your email and password' : 'Fill the Project URL, anon key, email and password');
       if (el) el.disabled = true; toast('Connecting…');
-      try { await connect(v('lv_url'), v('lv_anon'), v('lv_email'), v('lv_pw')); toast('Connected — live data loaded'); A.renderTop(); A.go('overview'); }
+      try { await connect(url, key, v('lv_email'), v('lv_pw')); toast('Connected — live data loaded'); A.renderTop(); A.go('overview'); }
       catch (e) { L.err = String(e.message || e); L.status = 'off'; toast(L.err); A.render(); }
     },
     liveOff: () => disconnect(),
@@ -310,7 +312,38 @@
     liveNotify: async () => { try { const p = await Notification.requestPermission(); toast(p === 'granted' ? 'HOT-lead pop-ups on' : 'Pop-ups blocked by the browser'); } catch (e) { toast('This browser cannot show pop-ups here'); } }
   });
 
-  SOL.LiveSync = { on, pull, push, callNow, queue, state: L };
+  /* ---------------- staff login screen (hosted build) ---------------- */
+  const DEMO_KEY = 'solaris-demo-ok';
+  function gateWanted() {
+    if (!CFG || on() || /claude/.test(location.hostname)) return false;
+    try { return sessionStorage.getItem(DEMO_KEY) !== '1'; } catch (e) { return true; }
+  }
+  function showGate(msg) {
+    let g = document.getElementById('liveGate');
+    if (!g) { g = document.createElement('div'); g.id = 'liveGate'; document.body.appendChild(g); }
+    const brand = (S.state.settings && S.state.settings.companyName) || 'Solaris';
+    g.setAttribute('style', 'position:fixed;inset:0;z-index:90;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px');
+    g.innerHTML = `<form id="gateForm" style="width:min(400px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.12)">
+      <div><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">${h(brand)} · AI OS</div><h1 style="margin:4px 0 0;font-size:22px">Staff login</h1><div class="small muted" style="margin-top:4px">लॉगिन करा — live leads, AI calls and recordings</div></div>
+      <label class="f">Email<input class="i" id="gt_email" type="email" autocomplete="username" required></label>
+      <label class="f">Password<input class="i" id="gt_pw" type="password" autocomplete="current-password" required></label>
+      <div id="gt_msg" class="small" style="color:var(--bad);min-height:1em">${h(msg || '')}</div>
+      <button class="btn pri" id="gt_go" type="submit" style="justify-content:center">Log in</button>
+      <button class="btn ghost sm" id="gt_demo" type="button" style="justify-content:center">Explore the demo instead</button>
+    </form>`;
+    g.querySelector('#gt_demo').onclick = () => { try { sessionStorage.setItem(DEMO_KEY, '1'); } catch (e) {} g.remove(); };
+    g.querySelector('#gateForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const b = g.querySelector('#gt_go'); b.disabled = true; b.textContent = 'Logging in…';
+      try {
+        await connect(CFG.supabaseUrl, CFG.supabaseKey, g.querySelector('#gt_email').value, g.querySelector('#gt_pw').value);
+        g.remove(); A.renderTop(); A.go('overview'); toast('Welcome — live data loaded');
+      } catch (e) { g.querySelector('#gt_msg').textContent = String(e.message || e); b.disabled = false; b.textContent = 'Log in'; }
+    };
+    setTimeout(() => { const e = g.querySelector('#gt_email'); if (e) e.focus(); }, 50);
+  }
+
+  SOL.LiveSync = { on, pull, push, callNow, queue, state: L, showGate };
 
   /* ---------------- start ---------------- */
   if (L.conn && L.conn.access) {
@@ -318,7 +351,8 @@
     TABLES.forEach((t) => { L.hashes[t] = {}; });
     // resume: server is the source of truth after a reload
     clearLocal(); L.lastPull = {}; L.hashes = {};
-    pull().then(loop);
+    pull().then(() => { if (L.status === 'off' && gateWanted()) showGate('Your login expired — please log in again'); loop(); });
   }
   A.renderTop(); A.render();
+  if (gateWanted()) showGate();
 })();
