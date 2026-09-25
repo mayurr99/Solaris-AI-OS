@@ -154,6 +154,12 @@ export function roofSqft(v) {
   if (/guntha|गुंठ/.test(t)) n = n * 1089;
   return n >= 50 && n <= 500000 ? Math.round(n) : null;
 }
+export function visitAddress(lead) {
+  const a = String(lead.address || '').trim(); const area = lead.area || '';
+  if (!a) return (area ? area + ', ' : '') + 'Nashik';
+  const low = a.toLowerCase();
+  return a + (area && !low.includes(area.toLowerCase()) ? ', ' + area : '') + (low.includes('nashik') || low.includes('नाशिक') ? '' : ', Nashik');
+}
 export function mapVars(vars) {
   const v = vars || {}; const out = {};
   const prop = ENUM.property[pick(v.property || v.property_type).toLowerCase()]; if (prop) out.type = prop;
@@ -161,6 +167,7 @@ export function mapVars(vars) {
   const loc = normArea(v.locality || v.area); if (loc) out.area = loc;
   const roof = ENUM.roof[pick(v.roof_owner).toLowerCase()]; if (roof) out.roofOwn = roof;
   const ra = roofSqft(v.roof_area_sqft || v.roof_area || v.house_area); if (ra) out.roofArea = ra;
+  const ad = pick(v.address || v.visit_address || v.full_address); if (ad.length >= 6 && !/^(unknown|none|na|n\/a|not given)$/i.test(ad)) out.address = ad;
   const tl = ENUM.timeline[pick(v.timeline).toLowerCase().replace(/\s+/g, ' ').replace('–', '-')]; if (tl) out.timeline = tl;
   const obj = pick(v.objections); if (obj) out.objections = obj.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => ({ price: 'Price', monsoon: 'Monsoon / cloudy days', 'other quotes': 'Getting other quotes', rented: 'Rented property' }[x.toLowerCase()] || x));
   const nm = pick(v.customer_name); if (nm) out.name = nm;
@@ -242,7 +249,7 @@ export function processWebhook(ctx) {
   }
 
   // ---- connected: update lead fields (never erase existing values with blanks) ----
-  ['type', 'bill', 'area', 'roofOwn', 'roofArea', 'timeline'].forEach((k) => { if (m[k] != null && m[k] !== '') lead[k] = m[k]; });
+  ['type', 'bill', 'area', 'roofOwn', 'roofArea', 'address', 'timeline'].forEach((k) => { if (m[k] != null && m[k] !== '') lead[k] = m[k]; });
   if (m.name && (isNew || /^Caller |^Unknown/.test(lead.name))) lead.name = m.name;
   if (m.objections) lead.objections = Array.from(new Set([...(lead.objections || []), ...m.objections]));
   lead.answered = true; lead.lastContact = now; lead.attempts = 0;
@@ -272,10 +279,11 @@ export function processWebhook(ctx) {
     if (at && at > now - HOUR) {
       const v = ctx.openVisit ? Object.assign({}, ctx.openVisit) : { id: 'vs_' + callKey, leadId: lead.id, reminders: { wa24: false, aiConfirm: false, wa2: false } };
       Object.assign(v, { kind: society ? 'Society meeting' : commercial ? 'Factory meeting' : 'Site survey', at, mins: society || commercial ? 60 : 45,
-        with: society || commercial ? lead.owner : (surveyorFor(lead.area, ctx.team) || lead.owner), address: (lead.area || '') + ', Nashik', status: 'Scheduled', notes: 'Booked by AI on call' });
+        with: society || commercial ? lead.owner : (surveyorFor(lead.area, ctx.team) || lead.owner), address: visitAddress(lead), status: 'Scheduled', notes: 'Booked by AI on call' + (lead.address ? '' : ' · address not captured') });
       res.visits.push(v);
       res.followups.push({ id: 'fu_' + callKey + '_confirm', leadId: lead.id, type: 'Sales call', dueAt: Math.max(now + 10 * MIN, at - 3 * HOUR), owner: lead.owner, status: 'pending', note: 'Confirm tomorrow\'s visit with the customer (WhatsApp or call)', auto: true });
-      res.activity.push({ id: aid(0, 'visit'), at: now, leadId: lead.id, kind: 'visit', text: v.kind + ' booked by AI for ' + fmtIST(at) });
+      res.activity.push({ id: aid(0, 'visit'), at: now, leadId: lead.id, kind: 'visit', text: v.kind + ' booked by AI for ' + fmtIST(at) + (lead.address ? ' · ' + lead.address : '') });
+      if (!lead.address) res.followups.push({ id: 'fu_' + callKey + '_addr', leadId: lead.id, type: 'Sales call', dueAt: now + 15 * MIN, owner: lead.owner, status: 'pending', note: 'Visit booked but full address missing — get it on WhatsApp (house no., building, landmark)', auto: true });
     } else {
       res.followups.push({ id: 'fu_' + callKey + '_fixtime', leadId: lead.id, type: 'Sales call', dueAt: now + 15 * MIN, owner: lead.owner, status: 'pending', note: 'Customer agreed to a survey — fix exact time: "' + (m.surveyTime || 'not captured') + '"', auto: true });
     }
