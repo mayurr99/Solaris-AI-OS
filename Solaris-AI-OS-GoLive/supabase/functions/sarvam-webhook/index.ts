@@ -3,6 +3,7 @@
 // URL to give Sarvam:  https://<project>.supabase.co/functions/v1/sarvam-webhook?token=<WEBHOOK_TOKEN>
 import { sb, json, CORS, tokenOk, getConfig, setConfig, settings, row, leadByPhone, upsert, uid } from '../_shared/db.ts';
 import { processWebhook, normPhone } from '../_shared/logic.ts';
+import { autoAfterCall } from '../_shared/whatsapp.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -40,7 +41,10 @@ Deno.serve(async (req) => {
       const { data: open } = await sb.from('followups').select('data').eq('lead_id', res.lead.id).eq('status', 'pending');
       await upsert('followups', (open || []).map((f) => Object.assign({}, f.data, { status: 'cancelled', note: (f.data.note || '') + ' · stopped: DNC' })));
     }
-    return json({ ok: true, lead_id: res.lead.id, outcome: res.call && res.call.outcome });
+    // WhatsApp follow-up (visit confirmation, callback time, brochure, complaint number) — never blocks the CRM update
+    let wa = null;
+    try { wa = await autoAfterCall(res, key || res.call.id); } catch (e) { console.error('auto whatsapp', e); }
+    return json({ ok: true, lead_id: res.lead.id, outcome: res.call && res.call.outcome, whatsapp: wa ? wa.status : null });
   } catch (e) {
     console.error('webhook error', e);
     // 500 makes Sarvam retry the delivery later; every write above is idempotent, so a retry is safe
