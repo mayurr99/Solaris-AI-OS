@@ -108,10 +108,10 @@
     vwWho: (el) => { A.vw.who = el.value; render(); },
     bookVisit: (el) => {
       const l = el.dataset.id ? S.lead(el.dataset.id) : null; const t = new Date(Date.now() + U.DAY);
-      A.vd = { leadId: l ? l.id : '', kind: l && l.type === 'Society' ? 'Society meeting' : l && ['Factory', 'Shop', 'Institution'].includes(l.type) ? 'Factory meeting' : 'Site survey', date: t.toISOString().slice(0, 10), time: '11:00', mins: 45, with: l ? (l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner) : 'u_ganesh', address: l ? (l.area || '') + ', Nashik' : '', notes: '', wa: true, force: false, rescheduleOf: el.dataset.re || null };
+      A.vd = { leadId: l ? l.id : '', kind: l && l.type === 'Society' ? 'Society meeting' : l && ['Factory', 'Shop', 'Institution'].includes(l.type) ? 'Factory meeting' : 'Site survey', date: t.toISOString().slice(0, 10), time: '11:00', mins: 45, with: l ? (l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner) : 'u_ganesh', address: l ? ((l.address ? l.address + ', ' : '') + (l.area || '') + ', Nashik') : '', notes: '', wa: true, force: false, rescheduleOf: el.dataset.re || null };
       A.showModal(visitModal);
     },
-    vdSet: (el) => { A.vd[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; if (el.dataset.k === 'leadId') { const l = S.lead(el.value); if (l) { A.vd.address = (l.area || '') + ', Nashik'; A.vd.with = l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner; } } A.vd.force = false; render(); },
+    vdSet: (el) => { A.vd[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; if (el.dataset.k === 'leadId') { const l = S.lead(el.value); if (l) { A.vd.address = ((l.address ? l.address + ', ' : '') + (l.area || '') + ', Nashik'); A.vd.with = l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner; } } A.vd.force = false; render(); },
     vdSave: () => {
       const d = A.vd; if (!d.leadId) return toast('Choose a lead');
       const at = new Date(d.date + 'T' + d.time).getTime(); const end = at + Number(d.mins) * U.MIN;
@@ -158,7 +158,7 @@
     const v = S.state.visits.find((x) => x.id === A.vOpen); if (!v) return ''; const l = S.lead(v.leadId); const r = v.reminders || {}; const z = sizing(l);
     return `<div class="mhd"><h2 class="sp">${h(v.kind)} · ${h(l.name)}</h2><button class="btn ghost sm" data-act="closeModal" aria-label="Close">${I('x')}</button></div><div class="mbd">
       <div class="row"><span class="pill ${v.status === 'Completed' || v.status === 'Confirmed' ? 'good' : v.status === 'No-show' ? 'bad' : 'info'}">${h(v.status)}</span><b>${U.fmtDT(v.at)}</b><span class="muted">· ${v.mins} min · ${h(nameOf(v.with))}</span></div>
-      <div class="small">${I('map', '')} ${h(v.address || '')} · <span class="mono">${h(l.phone)}</span></div>
+      <div class="small">${I('map', '')} ${h(v.address || '')}${v.address ? ` <a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(v.address)}" target="_blank" rel="noopener">Open in Maps</a>` : ''} · <span class="mono">${h(l.phone)}</span></div>
       <div class="notice info small">Lead brief for the surveyor: ${h(l.type || '')}, bill ${U.inr(l.bill)}, roof ${h(l.roofOwn || '?')} ~${U.num(l.roofArea || 0)} sq ft, suggested ${z.kw} kW. ${(l.objections || []).length ? 'Objections: ' + h(l.objections.join(', ')) + '.' : ''} ${l.history ? '12-month bills: ' + h(l.history) + '.' : ''}</div>
       <div class="row xs"><span class="pill ${r.wa24 ? 'good' : 'line'}">WhatsApp T-24 h ${r.wa24 ? '✓' : ''}</span><span class="pill ${r.aiConfirm ? 'good' : 'line'}">AI confirmation call T-3 h ${r.aiConfirm ? '✓' : ''}</span><span class="pill ${r.wa2 ? 'good' : 'line'}">WhatsApp T-2 h ${r.wa2 ? '✓' : ''}</span></div>
       <label class="f">Visit notes / outcome<textarea class="i" id="vNotes" placeholder="Roof measured 900 sq ft, south-facing, no shading. Customer wants 5 kW with EMI.">${h(v.notes || '')}</textarea></label></div>
@@ -369,7 +369,7 @@
     else if (F.visitRequested) {
       outcome = 'Visit booked'; l.visitBooked = true; if (D.STAGES.indexOf(l.stage) < 3) l.stage = 'Site Survey';
       const d = new Date(now + U.DAY); d.setHours(11, 0, 0, 0); while (d.getDay() !== 6) d.setTime(d.getTime() + U.DAY);
-      S.state.visits.push({ id: U.uid('vs'), leadId: l.id, kind: l.type === 'Society' ? 'Society meeting' : l.type === 'Factory' ? 'Factory meeting' : 'Site survey', at: d.getTime(), mins: 45, with: l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner, address: (l.area || '') + ', Nashik', status: 'Scheduled', notes: 'Booked in test call · customer said: ' + (F.visitWhen || ''), reminders: {} });
+      S.state.visits.push({ id: U.uid('vs'), leadId: l.id, kind: l.type === 'Society' ? 'Society meeting' : l.type === 'Factory' ? 'Factory meeting' : 'Site survey', at: d.getTime(), mins: 45, with: l.type === 'Home' ? SOL.surveyorFor(l.area) : l.owner, address: ((l.address ? l.address + ', ' : '') + (l.area || '') + ', Nashik'), status: 'Scheduled', notes: 'Booked in test call · customer said: ' + (F.visitWhen || ''), reminders: {} });
       S.log(l.id, 'visit', 'Site visit booked for ' + U.fmtDT(d.getTime()));
     } else if (F.callbackWhen) { outcome = 'Callback'; S.state.followups.push({ id: U.uid('fu'), leadId: l.id, type: 'AI call', dueAt: now + U.DAY, owner: a.id, status: 'pending', note: F.callbackWhen, auto: true }); }
     if (!F.dnc && outcome !== 'Visit booked' && !F.callbackWhen) S.state.followups.push({ id: U.uid('fu'), leadId: l.id, type: 'WhatsApp', dueAt: now + 5 * U.MIN, owner: a.id, status: 'pending', note: 'Brochure + savings estimate', auto: true });
