@@ -148,6 +148,9 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--in
 .bars .b .lb{font-size:12px;color:var(--muted)}
 .bars .b .tip{position:absolute;bottom:calc(100% - 4px);background:var(--ink);color:var(--bg);font-size:12.5px;padding:3px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transform:translateY(4px);transition:.12s}
 .bars .b:hover .tip{opacity:1;transform:none}
+.bars .b:nth-child(-n+2) .tip{left:0}
+.bars .b:nth-last-child(-n+2) .tip{right:0}
+.bars .b .tip{visibility:hidden}.bars .b:hover .tip,.bars .b:focus .tip{visibility:visible;opacity:1;transform:none}
 
 /* wizard / login */
 .center{min-height:100vh;display:grid;place-items:center;padding:16px;background:radial-gradient(1200px 500px at 10% -10%,var(--brand-soft),transparent 60%),radial-gradient(900px 500px at 110% 110%,var(--accent-soft),transparent 60%),var(--bg)}
@@ -196,6 +199,8 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--in
   .stat .num{font-size:28px}
   .hide-m{display:none!important}
 }
+.demobar{background:var(--accent,#E8704B);color:#fff;font-size:13px;line-height:1.35;padding:6px 16px;text-align:center}
+.demobar a{color:#fff;text-decoration:underline;margin-left:6px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -203,6 +208,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--in
 <div id="layer"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
+<script src="demo.js"></script>
 <script src="panel.js"></script>
 <script src="panel2.js"></script>
 </body>
