@@ -29,6 +29,6 @@ jobs:
       - name: Deploy all functions (JWT check off — functions do their own auth)
         if: steps.tok.outputs.skip != '1'
         run: |
-          for f in sarvam-webhook lead-context run-due new-lead start-call recording; do
+          for f in sarvam-webhook lead-context run-due new-lead start-call recording wa-send wa-captions wa-webhook; do
             supabase functions deploy "$f" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
           done
