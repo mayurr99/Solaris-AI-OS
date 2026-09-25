@@ -274,6 +274,7 @@
       <div class="small" id="lg_m" style="color:var(--bad);min-height:1.2em">${h(msg || '')}</div>
       <button class="btn pri" type="submit" id="lg_b">Log in</button>
       <button class="btn ghost sm" type="button" data-act="forgot">Forgot password?</button>
+      <a class="btn sm" href="?demo" style="text-align:center">See the demo (sample data)</a>
       ${!BASE ? '<div class="note warn">config.js is missing the Supabase URL and key.</div>' : ''}
     </form></div>`;
     $('#loginForm').onsubmit = async (e) => {
